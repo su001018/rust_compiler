@@ -15,6 +15,7 @@ void Node::print() {
 }
 static AllocaInst* CreateEntryBlockAlloca(Function* TheFunction,
 	const std::string& VarName,Type* type) {
+	if (!type)return nullptr;
 	IRBuilder<> TmpB(&TheFunction->getEntryBlock(),
 		TheFunction->getEntryBlock().begin());
 	return TmpB.CreateAlloca(type, nullptr, VarName);
@@ -210,8 +211,18 @@ Value* Node::codegen() {
 
 	//改过文法之后assignmentExpression现在应该只有->vari+assignOp+BinOp这种类型了吧
 	case node_type::AssignmentExpression: {
+		Function* TheFunction = Builder->GetInsertBlock()->getParent();
+		Value* R = childNodes[2]->codegen();
+		//针对变量声明时为初始化和给定类型
+		if (NamedValues.count(childNodes[0]->value)) {
+			if (!NamedValues[childNodes[0]->value]) {
+				auto Alloca = CreateEntryBlockAlloca(TheFunction,
+					childNodes[0]->value, R->getType());
+				NamedValues[childNodes[0]->value] = Alloca;
+			}
+		}
+
 		Value* L = childNodes[0]->codegen();
-		Value* R = childNodes[2]->codegen();	
 		Value* Tmp;
 		string assignOpValue = childNodes[1]->value;
 		const char* asValue = assignOpValue.data();
@@ -422,11 +433,21 @@ Value* Node::codegen() {
 		Value* blockValue = childNodes[i]->codegen();
 
 		//变量列表复原
-		NamedValues.clear();
-		for (int k = 0; k < oldNames.size(); k++) {
-			NamedValues[oldNames[k]] = oldAllocas[k];
-		}
+		int k = 0;
+		vector<int>adds;
+		for (auto namedValue = NamedValues.begin(); namedValue != NamedValues.end();) {
+			if (!count(oldNames.begin(), oldNames.end(), namedValue->first))
+				NamedValues.erase(namedValue++);
+			else namedValue++;
 
+			if (!NamedValues.count(oldNames[k])) {
+				adds.push_back(k);
+			}
+			k++;
+		}
+		for (auto add : adds) {
+			NamedValues[oldNames[add]] = oldAllocas[add];
+		}
 		return blockValue;
 	}
 	case node_type::Statements: {
@@ -477,18 +498,22 @@ Value* Node::codegen() {
 		//找到所属函数
 		Function* TheFunction = Builder->GetInsertBlock()->getParent();
 
+		//初始值
+		Value* init = nullptr;
+		if (rightIdx != -1) {
+			init = childNodes[rightIdx]->codegen();
+		}
+
 		//变量类型
 		Type* valType;
 		if (typeIdx != -1) {
 			valType = getType(typeValue);
 		}
 		else {
-			valType = Type::getVoidTy(*TheContext);
-		}
-		//初始值
-		Value* init = nullptr;
-		if (rightIdx != -1) {
-			init = childNodes[rightIdx]->codegen();
+			if (init)valType = init->getType();
+			else {
+				valType = nullptr;
+			}
 		}
 
 		AllocaInst* Alloca = CreateEntryBlockAlloca(TheFunction, nameVal, valType);

@@ -266,7 +266,10 @@ Value *Node::codegen()
 		case (hash_compile_time("=")):
 			return Builder->CreateStore(R, address);
 		case (hash_compile_time("*=")):
-			Tmp = Builder->CreateMul(L, R, "multmp");
+			if (L->getType() == Type::getInt16Ty(*TheContext))
+				Tmp = Builder->CreateMul(L, R, "multmp");
+			else if (L->getType() == Type::getFloatTy(*TheContext))
+				Tmp = Builder->CreateFMul(L, R, "multmp");
 			return Builder->CreateStore(Tmp, address);
 		case (hash_compile_time("/=")):
 			if (L->getType() == Type::getInt16Ty(*TheContext))
@@ -278,10 +281,16 @@ Value *Node::codegen()
 			Tmp = Builder->CreateSRem(L, R, "remtmp");
 			return Builder->CreateStore(Tmp, address);
 		case (hash_compile_time("+=")):
-			Tmp = Builder->CreateAdd(L, R, "addtmp");
+			if (L->getType() == Type::getInt16Ty(*TheContext))
+				Tmp = Builder->CreateAdd(L, R, "addtmp");
+			else if (L->getType() == Type::getFloatTy(*TheContext))
+				Tmp = Builder->CreateFAdd(L, R, "addtmp");
 			return Builder->CreateStore(Tmp, address);
 		case (hash_compile_time("-=")):
-			Tmp = Builder->CreateSub(L, R, "subtmp");
+			if (L->getType() == Type::getInt16Ty(*TheContext))
+				Tmp = Builder->CreateSub(L, R, "subtmp");
+			else if (L->getType() == Type::getFloatTy(*TheContext))
+				Tmp = Builder->CreateFSub(L, R, "subtmp");
 			return Builder->CreateStore(Tmp, address);
 		case (hash_compile_time("<<=")):
 			Tmp = Builder->CreateShl(L, R, "shltmp");
@@ -321,11 +330,20 @@ Value *Node::codegen()
 			switch (hash_(op))
 			{
 			case hash_compile_time("+"):
-				return Builder->CreateAdd(L, R, "addtmp");
+				if (L->getType() == Type::getFloatTy(*TheContext))
+					return Builder->CreateFAdd(L, R, "addtmp");
+				else if (L->getType() == Type::getInt16Ty(*TheContext))
+					return Builder->CreateAdd(L, R, "addtmp");
 			case hash_compile_time("-"):
-				return Builder->CreateSub(L, R, "subtmp");
+				if (L->getType() == Type::getFloatTy(*TheContext))
+					return Builder->CreateFSub(L, R, "subtmp");
+				else if (L->getType() == Type::getInt16Ty(*TheContext))
+					return Builder->CreateSub(L, R, "subtmp");
 			case hash_compile_time("*"):
-				return Builder->CreateMul(L, R, "multmp");
+				if (L->getType() == Type::getFloatTy(*TheContext))
+					return Builder->CreateFMul(L, R, "multmp");
+				else if (L->getType() == Type::getInt16Ty(*TheContext))
+					return Builder->CreateMul(L, R, "multmp");
 			case hash_compile_time("/"):
 				if (L->getType() == Type::getInt16Ty(*TheContext))
 					return Builder->CreateSDiv(L, R, "divtmp");
@@ -408,11 +426,20 @@ Value *Node::codegen()
 			switch (hash_(op))
 			{
 			case hash_compile_time("+"):
-				return Builder->CreateAdd(L, R, "addtmp");
+				if (L->getType() == Type::getFloatTy(*TheContext))
+					return Builder->CreateFAdd(L, R, "addtmp");
+				else if (L->getType() == Type::getInt16Ty(*TheContext))
+					return Builder->CreateAdd(L, R, "addtmp");
 			case hash_compile_time("-"):
-				return Builder->CreateSub(L, R, "subtmp");
+				if (L->getType() == Type::getFloatTy(*TheContext))
+					return Builder->CreateFSub(L, R, "subtmp");
+				else if (L->getType() == Type::getInt16Ty(*TheContext))
+					return Builder->CreateSub(L, R, "subtmp");
 			case hash_compile_time("*"):
-				return Builder->CreateMul(L, R, "multmp");
+				if (L->getType() == Type::getFloatTy(*TheContext))
+					return Builder->CreateFMul(L, R, "multmp");
+				else if (L->getType() == Type::getInt16Ty(*TheContext))
+					return Builder->CreateMul(L, R, "multmp");
 			case hash_compile_time("/"):
 				if (L->getType() == Type::getInt16Ty(*TheContext))
 					return Builder->CreateSDiv(L, R, "divtmp");
@@ -507,11 +534,20 @@ Value *Node::codegen()
 			switch (hash_(op))
 			{
 			case hash_compile_time("+"):
-				return Builder->CreateAdd(L, R, "addtmp");
+				if (L->getType() == Type::getFloatTy(*TheContext))
+					return Builder->CreateFAdd(L, R, "addtmp");
+				else if (L->getType() == Type::getInt16Ty(*TheContext))
+					return Builder->CreateAdd(L, R, "addtmp");
 			case hash_compile_time("-"):
-				return Builder->CreateSub(L, R, "subtmp");
+				if (L->getType() == Type::getFloatTy(*TheContext))
+					return Builder->CreateFSub(L, R, "subtmp");
+				else if (L->getType() == Type::getInt16Ty(*TheContext))
+					return Builder->CreateSub(L, R, "subtmp");
 			case hash_compile_time("*"):
-				return Builder->CreateMul(L, R, "multmp");
+				if (L->getType() == Type::getFloatTy(*TheContext))
+					return Builder->CreateFMul(L, R, "multmp");
+				else if (L->getType() == Type::getInt16Ty(*TheContext))
+					return Builder->CreateMul(L, R, "multmp");
 			case hash_compile_time("/"):
 				if (L->getType() == Type::getInt16Ty(*TheContext))
 					return Builder->CreateSDiv(L, R, "divtmp");
@@ -582,7 +618,7 @@ Value *Node::codegen()
 			if (childNodes[i]->type == node_type::Statements)
 				break;
 		}
-		if (i == 0)
+		if (i == 0 || i == childNodes.size())
 			return nullptr;
 
 		Value *blockValue = childNodes[i]->codegen();
@@ -602,16 +638,22 @@ Value *Node::codegen()
 					NamedValues.erase(namedValue++);
 				else
 					namedValue++;
+				//if (!NamedValues.count(oldNames[k])) {
+				//	adds.push_back(k);
+				//}
+				//k++;
+			}
+			for (k; k < oldNames.size(); k++)
+			{
 				if (!NamedValues.count(oldNames[k]))
 				{
-					adds.push_back(k);
+					//adds.push_back(k);
+					NamedValues[oldNames[k]] = oldAllocas[k];
 				}
-				k++;
 			}
-			for (auto add : adds)
-			{
-				NamedValues[oldNames[add]] = oldAllocas[add];
-			}
+			//for (auto add : adds) {
+			//	NamedValues[oldNames[add]] = oldAllocas[add];
+			//}
 		}
 		return blockValue;
 	}
@@ -629,6 +671,8 @@ Value *Node::codegen()
 			}
 			returnValue = value;
 		}
+		if (!returnValue)
+			return Constant::getNullValue(Type::getInt16Ty(*TheContext));
 		return returnValue;
 	}
 	case node_type::Statement:
@@ -764,7 +808,7 @@ Value *Node::codegen()
 			return nullptr;
 
 		Value *CurVar = Builder->CreateLoad(Alloca, name.c_str());
-		Value *NextVar = Builder->CreateFAdd(CurVar, StepVal, "nextvar");
+		Value *NextVar = Builder->CreateAdd(CurVar, StepVal, "nextvar");
 		Builder->CreateStore(NextVar, Alloca);
 
 		Value *EndCond = new ICmpInst(*LoopBB, ICmpInst::ICMP_SLT, NextVar, EndVal);
@@ -839,6 +883,8 @@ Value *Node::codegen()
 		if (!childNodes[bodyIdx]->codegen())
 			return nullptr;
 		Builder->CreateBr(BodyBlock);
+		//return Constant::getNullValue(Type::getInt1Ty(*TheContext));
+		break;
 	}
 	case node_type::IfExpression:
 	{
@@ -876,112 +922,106 @@ Value *Node::codegen()
 
 		Builder->SetInsertPoint(ThenBlock);
 		thenValue = childNodes[thenIdx]->codegen();
-		if (!thenValue)
-			return nullptr;
-		Builder->CreateRet(thenValue);
-
-		Builder->SetInsertPoint(ElseBlock);
 		if (elseIdx != -1)
-		{
 			elseValue = childNodes[elseIdx]->codegen();
-		}
+	}
 		if (!elseValue)
-			return nullptr;
+			return Constant::getNullValue(Type::getInt16Ty(*TheContext));
 		Builder->CreateRet(ElseBlock);
-	}
-	case node_type::ConditionStatement:
-	{
-		Value *conditionStatementVal = childNodes[0]->codegen();
-		return conditionStatementVal;
-	}
-	case node_type::GroupedExpression:
-	{
-		Value *groupedExpressionVal;
-		for (int i = 0; i < childNodes.size(); i++)
-		{
-			if (childNodes[i]->type == node_type::ExpressionStatement)
-				groupedExpressionVal = childNodes[i]->codegen();
-		}
-		return groupedExpressionVal;
-	}
-	case node_type::FunctionCall:
-	{
-		int argsIdx = -1;
-		string name;
-		for (int i = 0; i < childNodes.size(); i++)
-		{
-			auto type = childNodes[i]->type;
-			auto value = childNodes[i]->value;
-			if (type == node_type::FunctionIdentifier)
-			{
-				name = value;
-			}
-			else if (type == node_type::CallParameterList)
-			{
-				argsIdx = i;
-			}
-		}
-		vector<Value *> Args;
-		for (int k = 0; k < childNodes[argsIdx]->childNodes.size(); k++)
-		{
-			auto type = childNodes[argsIdx]->childNodes[k]->type;
-			auto value = childNodes[argsIdx]->childNodes[k]->value;
-			if (type == node_type::Variable)
-			{
-				Args.push_back(childNodes[argsIdx]->childNodes[k]->codegen());
-			}
-			else if (type == node_type::LiteralExpression)
-			{
-				Args.push_back(childNodes[argsIdx]->childNodes[k]->childNodes[0]->codegen());
-			}
-		}
-
-		Function *Callee = TheModule->getFunction(name);
-		if (!Callee)
-			return IRError("Function not exist");
-		if (Args.size() != Callee->arg_size())
-			return IRError("Parameter number mismatch");
-		int j = 0;
-		for (auto &calleeArg : Callee->args())
-		{
-			if (calleeArg.getType() != Args[j]->getType())
-				return IRError("Parameter type mismatch");
-			j++;
-		}
-
-		return Builder->CreateCall(Callee, Args, "call");
-	}
-	case node_type::LiteralExpression:
-	{
-		return childNodes[0]->codegen();
-	}
-	case node_type::DeclarationRightStatement:
-	{
-		return childNodes[0]->codegen();
-	}
-	case node_type::ExpressionStatement:
-	{
-		return childNodes[0]->codegen();
-	}
-	case node_type::ReturnExpression:
-	{
-		Value *returnVal = nullptr;
-		for (int i = 0; i < childNodes.size(); i++)
-		{
-			if (childNodes[i]->type == node_type::ExpressionStatement)
-			{
-				returnVal = childNodes[i]->codegen();
-			}
-		}
-		return Builder->CreateRet(returnVal);
-	}
-	case node_type::BreakExpression:
-	{
-		return Builder->CreateRetVoid();
-	}
-
-	default:
-		return ConstantFP::get(Type::getDoubleTy(*TheContext), 1.0);
 		break;
 	}
+case node_type::ConditionStatement:
+{
+	Value *conditionStatementVal = childNodes[0]->codegen();
+	return conditionStatementVal;
+}
+case node_type::GroupedExpression:
+{
+	Value *groupedExpressionVal;
+	for (int i = 0; i < childNodes.size(); i++)
+	{
+		if (childNodes[i]->type == node_type::ExpressionStatement)
+			groupedExpressionVal = childNodes[i]->codegen();
+	}
+	return groupedExpressionVal;
+}
+case node_type::FunctionCall:
+{
+	int argsIdx = -1;
+	string name;
+	for (int i = 0; i < childNodes.size(); i++)
+	{
+		auto type = childNodes[i]->type;
+		auto value = childNodes[i]->value;
+		if (type == node_type::FunctionIdentifier)
+		{
+			name = value;
+		}
+		else if (type == node_type::CallParameterList)
+		{
+			argsIdx = i;
+		}
+	}
+	vector<Value *> Args;
+	for (int k = 0; k < childNodes[argsIdx]->childNodes.size(); k++)
+	{
+		auto type = childNodes[argsIdx]->childNodes[k]->type;
+		auto value = childNodes[argsIdx]->childNodes[k]->value;
+		if (type == node_type::Variable)
+		{
+			Args.push_back(childNodes[argsIdx]->childNodes[k]->codegen());
+		}
+		else if (type == node_type::LiteralExpression)
+		{
+			Args.push_back(childNodes[argsIdx]->childNodes[k]->childNodes[0]->codegen());
+		}
+	}
+
+	Function *Callee = TheModule->getFunction(name);
+	if (!Callee)
+		return IRError("Function not exist");
+	if (Args.size() != Callee->arg_size())
+		return IRError("Parameter number mismatch");
+	int j = 0;
+	for (auto &calleeArg : Callee->args())
+	{
+		if (calleeArg.getType() != Args[j]->getType())
+			return IRError("Parameter type mismatch");
+		j++;
+	}
+
+	return Builder->CreateCall(Callee, Args, "call");
+}
+case node_type::LiteralExpression:
+{
+	return childNodes[0]->codegen();
+}
+case node_type::DeclarationRightStatement:
+{
+	return childNodes[0]->codegen();
+}
+case node_type::ExpressionStatement:
+{
+	return childNodes[0]->codegen();
+}
+case node_type::ReturnExpression:
+{
+	Value *returnVal = nullptr;
+	for (int i = 0; i < childNodes.size(); i++)
+	{
+		if (childNodes[i]->type == node_type::ExpressionStatement)
+		{
+			returnVal = childNodes[i]->codegen();
+		}
+	}
+	return Builder->CreateRet(returnVal);
+}
+case node_type::BreakExpression:
+{
+	return Builder->CreateRetVoid();
+}
+
+default:
+	return ConstantFP::get(Type::getDoubleTy(*TheContext), 1.0);
+}
 }

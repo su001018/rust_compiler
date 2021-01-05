@@ -3,6 +3,37 @@ static std::unique_ptr<LLVMContext> TheContext;
 static std::unique_ptr<Module> TheModule;
 static std::unique_ptr<IRBuilder<>> Builder;
 static map<string, AllocaInst *> NamedValues;
+static ExecutionEngine* EE = NULL;
+
+typedef void (*func_type)(void*);
+
+void Node::initEE() {
+	string ErrStr;
+	if (EE == NULL) {
+		EE = EngineBuilder(std::move(TheModule))
+			.setEngineKind(EngineKind::JIT)
+			.setErrorStr(&ErrStr)
+			.setVerifyModules(true)
+			.setMCJITMemoryManager(std::unique_ptr<RTDyldMemoryManager>())
+			.setOptLevel(CodeGenOpt::Default)
+			.create();
+	}
+	else
+		EE->addModule(std::move(TheModule));
+	if (ErrStr.length() != 0)
+		cerr << "Create Engine Error" << endl << ErrStr << endl;
+	EE->finalizeObject();
+}
+
+void Node::runEE() {
+	uint64_t func_addr = EE->getFunctionAddress("main");
+	if (func_addr == 0) {
+		printf("错误, 找不到函数: %s\n", "main");
+		return;
+	}
+	func_type func = (func_type)func_addr;
+	func(NULL); // 需要传参数时可以从这里传递
+}
 void Node::Init()
 {
 	// Open a new context and module.
@@ -108,8 +139,7 @@ constexpr hash_t hash_compile_time(char const *str, hash_t last_value = basis)
 	return *str ? hash_compile_time(str + 1, (*str ^ last_value) * prime) : last_value;
 }
 
-Value *Node::codegen()
-{
+Value* Node::codegen() {
 	switch (type)
 	{
 	case node_type::FLOAT_LITERAL:
@@ -135,67 +165,54 @@ Value *Node::codegen()
 		break;
 	case node_type::Program:
 	{
-		Value *functionDefinitionsChild = childNodes[0]->codegen();
+		Value* functionDefinitionsChild = childNodes[0]->codegen();
 		return nullptr;
 	}
-	case node_type::FunctionDefinitions:
-	{
-		for (int i = 0; i < childNodes.size(); i++)
-		{
-			Value *V = childNodes[i]->codegen();
+	case node_type::FunctionDefinitions: {
+		for (int i = 0; i < childNodes.size(); i++) {
+			Value* V = childNodes[i]->codegen();
 			//if(V)
 			//V->print(errs());
 		}
 		return nullptr;
 	}
-	case node_type::FunctionDefinition:
-	{
+	case node_type::FunctionDefinition: {
 		int nameIdx = -1, returnIdx = -1, argsIdx = -1, bodyIdx = -1;
 		string nameVal, returnVal;
-		for (int i = 0; i < childNodes.size(); i++)
-		{
+		for (int i = 0; i < childNodes.size(); i++) {
 			node_type type = childNodes[i]->type;
 			string value = childNodes[i]->value;
 			if (type == node_type::FunctionIdentifier)
 			{
-				nameVal = value;
-				nameIdx = i;
+				nameVal = value; nameIdx = i;
 			}
-			else if (type == node_type::DataType)
-			{
-				returnIdx = i;
-				returnVal = value;
+			else if (type == node_type::DataType) {
+				returnIdx = i; returnVal = value;
 			}
-			else if (type == node_type::ParameterList)
-			{
+			else if (type == node_type::ParameterList) {
 				argsIdx = i;
 			}
-			else if (type == node_type::BlockExpression)
-			{
+			else if (type == node_type::BlockExpression) {
 				bodyIdx = i;
 			}
 		}
-		Function *TheFunction = TheModule->getFunction(nameVal);
-		if (TheFunction)
-			return TheFunction;
-		Type *returnType;
-		vector<Type *> args;
-		vector<string> argNames;
-		FunctionType *TheFunctionType;
+		Function* TheFunction = TheModule->getFunction(nameVal);
+		if (TheFunction)return TheFunction;
+		Type* returnType;
+		vector<Type*>args;
+		vector<string>argNames;
+		FunctionType* TheFunctionType;
 
 		//确定返回值
-		if (returnIdx != -1)
-		{
+		if (returnIdx != -1) {
 			returnType = getType(returnVal);
 		}
-		else
-		{
+		else {
 			returnType = Type::getVoidTy(*TheContext);
 		}
 
 		//确定参数列表
-		for (int j = 0; j < childNodes[argsIdx]->childNodes.size(); j++)
-		{
+		for (int j = 0; j < childNodes[argsIdx]->childNodes.size(); j++) {
 			node_type type = childNodes[argsIdx]->childNodes[j]->type;
 			string value = childNodes[argsIdx]->childNodes[j]->value;
 			if (type == node_type::DataType)
@@ -212,25 +229,23 @@ Value *Node::codegen()
 
 		//参数赋名
 		int k = 0;
-		for (auto &Arg : TheFunction->args())
-		{
+		for (auto& Arg : TheFunction->args()) {
 			Arg.setName(argNames[k++]);
 		}
 
 		//函数体
-		BasicBlock *BB = BasicBlock::Create(*TheContext, "entry", TheFunction);
+		BasicBlock* BB = BasicBlock::Create(*TheContext, "entry", TheFunction);
 		Builder->SetInsertPoint(BB);
 
 		NamedValues.clear();
-		for (auto &Arg : TheFunction->args())
+		for (auto& Arg : TheFunction->args())
 		{
-			AllocaInst *Alloca = CreateEntryBlockAlloca(TheFunction, (string)Arg.getName(), Arg.getType());
+			AllocaInst* Alloca = CreateEntryBlockAlloca(TheFunction, (string)Arg.getName(), Arg.getType());
 			Builder->CreateStore(&Arg, Alloca);
 			NamedValues[(string)Arg.getName()] = Alloca;
 		}
 
-		if (Value *RetVal = childNodes[bodyIdx]->codegen())
-		{
+		if (Value* RetVal = childNodes[bodyIdx]->codegen()) {
 			Builder->CreateRet(RetVal);
 			verifyFunction(*TheFunction);
 			return TheFunction;
@@ -240,95 +255,91 @@ Value *Node::codegen()
 		return nullptr;
 	}
 
-	//改过文法之后assignmentExpression现在应该只有->vari+assignOp+BinOp这种类型了吧
-	case node_type::AssignmentExpression:
-	{
-		Function *TheFunction = Builder->GetInsertBlock()->getParent();
-		Value *R = childNodes[2]->codegen();
+									  //改过文法之后assignmentExpression现在应该只有->vari+assignOp+BinOp这种类型了吧
+	case node_type::AssignmentExpression: {
+		Function* TheFunction = Builder->GetInsertBlock()->getParent();
+		Value* R = childNodes[2]->codegen();
 		//针对变量声明时为初始化和给定类型
-		if (NamedValues.count(childNodes[0]->value))
-		{
-			if (!NamedValues[childNodes[0]->value])
-			{
+		if (NamedValues.count(childNodes[0]->value)) {
+			if (!NamedValues[childNodes[0]->value]) {
 				auto Alloca = CreateEntryBlockAlloca(TheFunction,
-																						 childNodes[0]->value, R->getType());
+					childNodes[0]->value, R->getType());
 				NamedValues[childNodes[0]->value] = Alloca;
 			}
 		}
 
-		Value *L = childNodes[0]->codegen();
-		Value *address = NamedValues[childNodes[0]->value];
-		Value *Tmp;
+		Value* L = childNodes[0]->codegen();
+		Value* address = NamedValues[childNodes[0]->value];
+		Value* Tmp;
 		string assignOpValue = childNodes[1]->value;
-		const char *asValue = assignOpValue.data();
+		const char* asValue = assignOpValue.data();
 		switch (hash_(asValue))
 		{
-		case (hash_compile_time("=")):
+		case(hash_compile_time("=")):
 			return Builder->CreateStore(R, address);
-		case (hash_compile_time("*=")):
+		case(hash_compile_time("*=")):
 			if (L->getType() == Type::getInt16Ty(*TheContext))
 				Tmp = Builder->CreateMul(L, R, "multmp");
 			else if (L->getType() == Type::getFloatTy(*TheContext))
 				Tmp = Builder->CreateFMul(L, R, "multmp");
 			return Builder->CreateStore(Tmp, address);
-		case (hash_compile_time("/=")):
+		case(hash_compile_time("/=")):
 			if (L->getType() == Type::getInt16Ty(*TheContext))
 				Tmp = Builder->CreateSDiv(L, R, "divtmp");
 			if (L->getType() == Type::getFloatTy(*TheContext))
 				Tmp = Builder->CreateFDiv(L, R, "divtmp");
 			return Builder->CreateStore(Tmp, address);
-		case (hash_compile_time("%=")):
+		case(hash_compile_time("%=")):
 			Tmp = Builder->CreateSRem(L, R, "remtmp");
 			return Builder->CreateStore(Tmp, address);
-		case (hash_compile_time("+=")):
+		case(hash_compile_time("+=")):
 			if (L->getType() == Type::getInt16Ty(*TheContext))
 				Tmp = Builder->CreateAdd(L, R, "addtmp");
 			else if (L->getType() == Type::getFloatTy(*TheContext))
 				Tmp = Builder->CreateFAdd(L, R, "addtmp");
 			return Builder->CreateStore(Tmp, address);
-		case (hash_compile_time("-=")):
+		case(hash_compile_time("-=")):
 			if (L->getType() == Type::getInt16Ty(*TheContext))
 				Tmp = Builder->CreateSub(L, R, "subtmp");
 			else if (L->getType() == Type::getFloatTy(*TheContext))
 				Tmp = Builder->CreateFSub(L, R, "subtmp");
 			return Builder->CreateStore(Tmp, address);
-		case (hash_compile_time("<<=")):
+		case(hash_compile_time("<<=")):
 			Tmp = Builder->CreateShl(L, R, "shltmp");
 			return Builder->CreateStore(Tmp, address);
-		case (hash_compile_time(">>=")):
+		case(hash_compile_time(">>=")):
 			Tmp = Builder->CreateLShr(L, R, "LShrtmp");
 			return Builder->CreateStore(Tmp, address);
-		case (hash_compile_time("&=")):
+		case(hash_compile_time("&=")):
 			Tmp = Builder->CreateAnd(L, R, "andtmp");
 			return Builder->CreateStore(Tmp, address);
-		case (hash_compile_time("^=")):
+		case(hash_compile_time("^=")):
 			Tmp = Builder->CreateXor(L, R, "xortmp");
 			return Builder->CreateStore(Tmp, address);
-		case (hash_compile_time("|=")):
+		case(hash_compile_time("|=")):
 			Tmp = Builder->CreateOr(L, R, "ortmp");
 			return Builder->CreateStore(Tmp, address);
 		default:
 			return LogErrorVV("invalid assignment operator");
+
 		}
+
 	}
-	//后来我发现LHS可以再分LHS OP RHS ，不知道还有没有其他情况，目前操作就是加个判断看看是什么，感觉分的时候应该有一个binaryexpression会更好看一些，但好像因为左递归的问题去掉了
-	case node_type::LHS:
-	{
+										//后来我发现LHS可以再分LHS OP RHS ，不知道还有没有其他情况，目前操作就是加个判断看看是什么，感觉分的时候应该有一个binaryexpression会更好看一些，但好像因为左递归的问题去掉了
+	case node_type::LHS: {
 		node_type firstType = childNodes[0]->type;
 		string returnValue;
 		//直接从Binary Expression粘过来了
-		if (firstType == node_type::LHS)
-		{
-			Value *L = childNodes[0]->codegen();
-			Value *R = childNodes[2]->codegen();
+		if (firstType == node_type::LHS) {
+			Value* L = childNodes[0]->codegen();
+			Value* R = childNodes[2]->codegen();
 			if (!L || !R)
 				return nullptr;
 
 			string Op = childNodes[1]->value;
-			const char *op = Op.data();
+			const char* op = Op.data();
 
-			switch (hash_(op))
-			{
+			switch (hash_(op)) {
 			case hash_compile_time("+"):
 				if (L->getType() == Type::getFloatTy(*TheContext))
 					return Builder->CreateFAdd(L, R, "addtmp");
@@ -391,6 +402,7 @@ Value *Node::codegen()
 			case hash_compile_time("&"):
 				return Builder->CreateAnd(L, R, "andtmp");
 
+
 				//二进制表达式只有！没有写，考虑了一下不应该在这里去写
 
 			default:
@@ -404,8 +416,7 @@ Value *Node::codegen()
 			return childNodes[0]->codegen();
 		}
 	}
-	case node_type::RHS:
-	{
+	case node_type::RHS: {
 		//for (int i = 0; i < childNodes.size(); i++) {
 		//	childNodes[i]->codegen();
 		//}
@@ -413,18 +424,16 @@ Value *Node::codegen()
 		node_type firstType = childNodes[0]->type;
 		string returnValue;
 		//直接从Binary Expression粘过来了
-		if (firstType == node_type::LHS)
-		{
-			Value *L = childNodes[0]->codegen();
-			Value *R = childNodes[2]->codegen();
+		if (firstType == node_type::LHS) {
+			Value* L = childNodes[0]->codegen();
+			Value* R = childNodes[2]->codegen();
 			if (!L || !R)
 				return nullptr;
 
 			string Op = childNodes[1]->value;
-			const char *op = Op.data();
+			const char* op = Op.data();
 
-			switch (hash_(op))
-			{
+			switch (hash_(op)) {
 			case hash_compile_time("+"):
 				if (L->getType() == Type::getFloatTy(*TheContext))
 					return Builder->CreateFAdd(L, R, "addtmp");
@@ -487,6 +496,7 @@ Value *Node::codegen()
 			case hash_compile_time("&"):
 				return Builder->CreateAnd(L, R, "andtmp");
 
+
 				//二进制表达式只有！没有写，考虑了一下不应该在这里去写
 
 			default:
@@ -500,12 +510,10 @@ Value *Node::codegen()
 			return childNodes[0]->codegen();
 		}
 	}
-	case node_type::PrimaryExpression:
-	{
+	case node_type::PrimaryExpression: {
 		//1.带括号则取中间
 		node_type type = childNodes[0]->type;
-		if (type == node_type::Token)
-		{
+		if (type == node_type::Token) {
 			return childNodes[1]->codegen();
 		}
 		//2.literalexpression或者变量
@@ -514,25 +522,22 @@ Value *Node::codegen()
 			return childNodes[0]->codegen();
 		}
 	}
-	case node_type::BinaryExpression:
-	{
+	case node_type::BinaryExpression: {
 		//只有一个LHS时
-		if (childNodes.size() == 1)
-		{
+		if (childNodes.size() == 1) {
 			return childNodes[0]->codegen();
 		}
 		else
 		{
-			Value *L = childNodes[0]->codegen();
-			Value *R = childNodes[2]->codegen();
+			Value* L = childNodes[0]->codegen();
+			Value* R = childNodes[2]->codegen();
 			if (!L || !R)
 				return nullptr;
 
 			string Op = childNodes[1]->value;
-			const char *op = Op.data();
+			const char* op = Op.data();
 
-			switch (hash_(op))
-			{
+			switch (hash_(op)) {
 			case hash_compile_time("+"):
 				if (L->getType() == Type::getFloatTy(*TheContext))
 					return Builder->CreateFAdd(L, R, "addtmp");
@@ -596,57 +601,50 @@ Value *Node::codegen()
 				return Builder->CreateAnd(L, R, "andtmp");
 				//按位与或找不到函数就先用与或了
 
+
 			default:
 				return LogErrorVV("invalid binary operator");
 			}
 		}
+
 	}
 
-	case node_type::BlockExpression:
-	{
+	case node_type::BlockExpression: {
 		int i = 0;
 		//保存变量列表
-		vector<string> oldNames;
-		vector<AllocaInst *> oldAllocas;
-		for (auto k = NamedValues.begin(); k != NamedValues.end(); k++)
-		{
+		vector<string>oldNames;
+		vector<AllocaInst*>oldAllocas;
+		for (auto k = NamedValues.begin(); k != NamedValues.end(); k++) {
 			oldNames.push_back(k->first);
 			oldAllocas.push_back(k->second);
 		}
-		for (i; i < childNodes.size(); i++)
-		{
+		for (i; i < childNodes.size(); i++) {
 			if (childNodes[i]->type == node_type::Statements)
 				break;
 		}
-		if (i == 0 || i == childNodes.size())
-			return nullptr;
+		if (i == 0 || i == childNodes.size())return nullptr;
 
-		Value *blockValue = childNodes[i]->codegen();
+		Value* blockValue = childNodes[i]->codegen();
 
 		//变量列表复原
 		int k = 0;
-		vector<int> adds;
+		vector<int>adds;
 		if (oldNames.size() == 0)
 		{
 			NamedValues.clear();
 		}
-		else
-		{
-			for (auto namedValue = NamedValues.begin(); namedValue != NamedValues.end();)
-			{
+		else {
+			for (auto namedValue = NamedValues.begin(); namedValue != NamedValues.end();) {
 				if (!count(oldNames.begin(), oldNames.end(), namedValue->first))
 					NamedValues.erase(namedValue++);
-				else
-					namedValue++;
+				else namedValue++;
 				//if (!NamedValues.count(oldNames[k])) {
 				//	adds.push_back(k);
 				//}
 				//k++;
 			}
-			for (k; k < oldNames.size(); k++)
-			{
-				if (!NamedValues.count(oldNames[k]))
-				{
+			for (k; k < oldNames.size(); k++) {
+				if (!NamedValues.count(oldNames[k])) {
 					//adds.push_back(k);
 					NamedValues[oldNames[k]] = oldAllocas[k];
 				}
@@ -657,16 +655,14 @@ Value *Node::codegen()
 		}
 		return blockValue;
 	}
-	case node_type::Statements:
-	{
+	case node_type::Statements: {
 		int idx = 0;
-		Value *returnValue;
-		Value *value = nullptr;
-		for (idx; idx < childNodes.size(); idx++)
-		{
+		Value* returnValue;
+		Value* value = nullptr;
+		for (idx; idx < childNodes.size(); idx++) {
 			node_type type = childNodes[idx]->type;
-			if (type == node_type::Statement || type == node_type::IfExpression || type == node_type::CycleExpression)
-			{
+			if (type == node_type::Statement || type == node_type::IfExpression
+				|| type == node_type::CycleExpression) {
 				value = childNodes[idx]->codegen();
 			}
 			returnValue = value;
@@ -675,36 +671,28 @@ Value *Node::codegen()
 			return Constant::getNullValue(Type::getInt16Ty(*TheContext));
 		return returnValue;
 	}
-	case node_type::Statement:
-	{
+	case node_type::Statement: {
 		return childNodes[0]->codegen();
 	}
-	case node_type::DeclarationStatement:
-	{
+	case node_type::DeclarationStatement: {
 		int nameIdx = -1, typeIdx = -1, rightIdx = -1;
 		string nameVal, typeValue;
-		for (int i = 0; i < childNodes.size(); i++)
-		{
+		for (int i = 0; i < childNodes.size(); i++) {
 			node_type type = childNodes[i]->type;
 			string value = childNodes[i]->value;
-			if (type == node_type::VariableDefinition)
-			{
+			if (type == node_type::VariableDefinition) {
 				nameIdx = i;
-				for (int j = 0; j < childNodes[i]->childNodes.size(); j++)
-				{
-					if (childNodes[i]->childNodes[j]->type == node_type::Variable)
-					{
+				for (int j = 0; j < childNodes[i]->childNodes.size(); j++) {
+					if (childNodes[i]->childNodes[j]->type == node_type::Variable) {
 						nameVal = childNodes[i]->childNodes[j]->value;
 					}
 				}
 			}
-			else if (type == node_type::DataType)
-			{
+			else if (type == node_type::DataType) {
 				typeIdx = i;
 				typeValue = value;
 			}
-			else if (type == node_type::DeclarationRightStatement)
-			{
+			else if (type == node_type::DeclarationRightStatement) {
 				rightIdx = i;
 			}
 		}
@@ -713,108 +701,95 @@ Value *Node::codegen()
 		//std::vector<AllocaInst*> OldBindings;
 		//改为循环语句负责重置变量表
 
+
 		//找到所属函数
-		Function *TheFunction = Builder->GetInsertBlock()->getParent();
+		Function* TheFunction = Builder->GetInsertBlock()->getParent();
 
 		//初始值
-		Value *init = nullptr;
-		if (rightIdx != -1)
-		{
+		Value* init = nullptr;
+		if (rightIdx != -1) {
 			init = childNodes[rightIdx]->codegen();
 		}
 
 		//变量类型
-		Type *valType;
-		if (typeIdx != -1)
-		{
+		Type* valType;
+		if (typeIdx != -1) {
 			valType = getType(typeValue);
 		}
-		else
-		{
-			if (init)
-				valType = init->getType();
-			else
-			{
+		else {
+			if (init)valType = init->getType();
+			else {
 				valType = nullptr;
 			}
 		}
 
-		AllocaInst *Alloca = CreateEntryBlockAlloca(TheFunction, nameVal, valType);
+		AllocaInst* Alloca = CreateEntryBlockAlloca(TheFunction, nameVal, valType);
 		Builder->CreateStore(init, Alloca);
 		NamedValues[nameVal] = Alloca;
 
 		return nullptr;
 	}
-	case node_type::Variable:
-	{
-		Value *V = NamedValues[value];
-		if (!V)
-			return IRError("None Varibal");
-		else
-			return Builder->CreateLoad(V, value);
+	case node_type::Variable: {
+		Value* V = NamedValues[value];
+		if (!V)return IRError("None Varibal");
+		else return Builder->CreateLoad(V, value);
 	}
-	case node_type::CycleExpression:
-	{
+	case node_type::CycleExpression: {
 		return childNodes[0]->codegen();
 	}
-	case node_type::ForExpression:
-	{
+	case node_type::ForExpression: {
 		string name;
 		int starIdx = -1, endIdx = -1, bodyIdx = -1;
-		for (int i = 0; i < childNodes.size(); i++)
-		{
+		for (int i = 0; i < childNodes.size(); i++) {
 			auto type = childNodes[i]->type;
 			auto value = childNodes[i]->value;
-			if (type == node_type::Identifier)
-			{
+			if (type == node_type::Identifier) {
 				name = value;
 				starIdx = i + 2;
 			}
-			else if (type == node_type::BinaryExpression && starIdx != -1)
-			{
+			else if (type == node_type::BinaryExpression && starIdx != -1) {
 				endIdx = i;
 			}
-			else if (type == node_type::BlockExpression)
-			{
+			else if (type == node_type::BlockExpression) {
 				bodyIdx = i;
 			}
 		}
-		Function *TheFunction = Builder->GetInsertBlock()->getParent();
+		Function* TheFunction = Builder->GetInsertBlock()->getParent();
 
-		AllocaInst *Alloca = CreateEntryBlockAlloca(TheFunction, name, Type::getInt16Ty(*TheContext));
+		AllocaInst* Alloca = CreateEntryBlockAlloca(TheFunction, name, Type::getInt16Ty(*TheContext));
 
-		Value *StartVal = childNodes[starIdx]->codegen();
+		Value* StartVal = childNodes[starIdx]->codegen();
 		if (!StartVal)
 			return nullptr;
 
 		Builder->CreateStore(StartVal, Alloca);
 
-		BasicBlock *LoopBB = BasicBlock::Create(*TheContext, "loop", TheFunction);
+		BasicBlock* LoopBB = BasicBlock::Create(*TheContext, "loop", TheFunction);
 
 		Builder->CreateBr(LoopBB);
 
 		Builder->SetInsertPoint(LoopBB);
 
-		AllocaInst *OldVal = NamedValues[name];
+		AllocaInst* OldVal = NamedValues[name];
 		NamedValues[name] = Alloca;
 
 		if (!childNodes[bodyIdx]->codegen())
 			return nullptr;
 
-		Value *StepVal = ConstantInt::get(Type::getInt16Ty(*TheContext), 1);
+		Value* StepVal = ConstantInt::get(Type::getInt16Ty(*TheContext), 1);
 
-		Value *EndVal = childNodes[endIdx]->codegen();
+		Value* EndVal = childNodes[endIdx]->codegen();
 		if (!EndVal)
 			return nullptr;
 
-		Value *CurVar = Builder->CreateLoad(Alloca, name.c_str());
-		Value *NextVar = Builder->CreateAdd(CurVar, StepVal, "nextvar");
+		Value* CurVar = Builder->CreateLoad(Alloca, name.c_str());
+		Value* NextVar = Builder->CreateAdd(CurVar, StepVal, "nextvar");
 		Builder->CreateStore(NextVar, Alloca);
 
-		Value *EndCond = new ICmpInst(*LoopBB, ICmpInst::ICMP_SLT, NextVar, EndVal);
+		Value* EndCond = new ICmpInst(*LoopBB, ICmpInst::ICMP_SLT, NextVar, EndVal);
 
-		BasicBlock *AfterBB =
-				BasicBlock::Create(*TheContext, "afterloop", TheFunction);
+		BasicBlock* AfterBB =
+			BasicBlock::Create(*TheContext, "afterloop", TheFunction);
 
 		Builder->CreateCondBr(EndCond, LoopBB, AfterBB);
 
@@ -827,201 +802,176 @@ Value *Node::codegen()
 
 		return Constant::getNullValue(Type::getInt16Ty(*TheContext));
 	}
-	case node_type::WhileExpression:
-	{
+	case node_type::WhileExpression: {
 		int condIdx = -1, bodyIdx = -1;
-		for (int i = 0; i < childNodes.size(); i++)
-		{
+		for (int i = 0; i < childNodes.size(); i++) {
 			auto type = childNodes[i]->type;
-			if (type == node_type::ExpressionStatement)
-			{
+			if (type == node_type::ExpressionStatement) {
 				condIdx = i;
 			}
-			else if (type == node_type::BlockExpression)
-			{
+			else if (type == node_type::BlockExpression) {
 				bodyIdx = i;
 			}
 		}
-		Function *TheFunction = Builder->GetInsertBlock()->getParent();
-		Value *CondVal = childNodes[condIdx]->codegen();
+		Function* TheFunction = Builder->GetInsertBlock()->getParent();
+		Value* CondVal = childNodes[condIdx]->codegen();
 		CondVal = Builder->CreateICmpNE(CondVal,
-																		ConstantInt::get(Type::getInt1Ty(*TheContext), 1), "cond");
+			ConstantInt::get(Type::getInt1Ty(*TheContext), 1), "cond");
 
-		BasicBlock *BodyBlock = BasicBlock::Create(*TheContext, "body", TheFunction);
-		BasicBlock *AfterBlcok = BasicBlock::Create(*TheContext, "after", TheFunction);
+		BasicBlock* BodyBlock = BasicBlock::Create(*TheContext, "body", TheFunction);
+		BasicBlock* AfterBlcok = BasicBlock::Create(*TheContext, "after", TheFunction);
 
 		Builder->CreateCondBr(CondVal, BodyBlock, AfterBlcok);
 
 		Builder->SetInsertPoint(BodyBlock);
-		if (!childNodes[bodyIdx]->codegen())
-		{
+		if (!childNodes[bodyIdx]->codegen()) {
 			return nullptr;
 		}
 		CondVal = childNodes[condIdx]->codegen();
 		CondVal = Builder->CreateICmpNE(CondVal,
-																		ConstantInt::get(Type::getInt1Ty(*TheContext), 1), "cond");
+			ConstantInt::get(Type::getInt1Ty(*TheContext), 1), "cond");
 		Builder->CreateCondBr(CondVal, BodyBlock, AfterBlcok);
 
 		Builder->SetInsertPoint(AfterBlcok);
 		return Builder->CreateRetVoid();
+
 	}
-	case node_type::LoopExpression:
-	{
+	case node_type::LoopExpression: {
 		int bodyIdx = -1;
-		for (int i = 0; i < childNodes.size(); i++)
-		{
+		for (int i = 0; i < childNodes.size(); i++) {
 			auto type = childNodes[i]->type;
-			if (type == node_type::BlockExpression)
-			{
+			if (type == node_type::BlockExpression) {
 				bodyIdx = i;
 			}
 		}
-		Function *TheFunction = Builder->GetInsertBlock()->getParent();
-		BasicBlock *BodyBlock = BasicBlock::Create(*TheContext, "body", TheFunction);
+		Function* TheFunction = Builder->GetInsertBlock()->getParent();
+		BasicBlock* BodyBlock = BasicBlock::Create(*TheContext, "body", TheFunction);
 		Builder->CreateBr(BodyBlock);
 		Builder->SetInsertPoint(BodyBlock);
-		if (!childNodes[bodyIdx]->codegen())
-			return nullptr;
+		if (!childNodes[bodyIdx]->codegen())return nullptr;
 		Builder->CreateBr(BodyBlock);
 		//return Constant::getNullValue(Type::getInt1Ty(*TheContext));
 		break;
 	}
-	case node_type::IfExpression:
-	{
+	case node_type::IfExpression: {
 		int condIdx = -1, thenIdx = -1, elseIdx = -1;
-		Value *condValue = nullptr;
-		Value *thenValue = nullptr;
-		Value *elseValue = nullptr;
-		for (int i = 0; i < childNodes.size(); i++)
-		{
+		Value* condValue = nullptr;
+		Value* thenValue = nullptr;
+		Value* elseValue = nullptr;
+		for (int i = 0; i < childNodes.size(); i++) {
 			node_type type = childNodes[i]->type;
-			if (type == node_type::ConditionStatement)
-			{
+			if (type == node_type::ConditionStatement) {
 				condIdx = i;
 			}
-			else if (type == node_type::BlockExpression && thenIdx != -1)
-			{
+			else if (type == node_type::BlockExpression && thenIdx != -1) {
 				elseIdx = i;
 			}
-			else if (type == node_type::BlockExpression && thenIdx == -1)
-			{
+			else if (type == node_type::BlockExpression && thenIdx == -1) {
 				thenIdx = i;
 			}
 		}
 
 		condValue = childNodes[condIdx]->codegen();
 
+
 		condValue = Builder->CreateICmpNE(condValue,
-																			ConstantInt::get(Type::getInt1Ty(*TheContext), 1), "cond");
-		Function *TheFunction = Builder->GetInsertBlock()->getParent();
+			ConstantInt::get(Type::getInt1Ty(*TheContext), 1), "cond");
+		Function* TheFunction = Builder->GetInsertBlock()->getParent();
 		//基本块
-		BasicBlock *ThenBlock = BasicBlock::Create(*TheContext, "ThenBlock", TheFunction);
-		BasicBlock *ElseBlock = BasicBlock::Create(*TheContext, "ElseBlock", TheFunction);
+		BasicBlock* ThenBlock = BasicBlock::Create(*TheContext, "ThenBlock", TheFunction);
+		BasicBlock* ElseBlock = BasicBlock::Create(*TheContext, "ElseBlock", TheFunction);
+
 
 		Builder->CreateCondBr(condValue, ThenBlock, ElseBlock);
 
 		Builder->SetInsertPoint(ThenBlock);
 		thenValue = childNodes[thenIdx]->codegen();
-		if (elseIdx != -1)
+		if (!thenValue)return Constant::getNullValue(Type::getInt16Ty(*TheContext));
+		Builder->CreateRet(thenValue);
+
+
+		Builder->SetInsertPoint(ElseBlock);
+		if (elseIdx != -1) {
 			elseValue = childNodes[elseIdx]->codegen();
-	}
-		if (!elseValue)
-			return Constant::getNullValue(Type::getInt16Ty(*TheContext));
+		}
+		if (!elseValue)return Constant::getNullValue(Type::getInt16Ty(*TheContext));
 		Builder->CreateRet(ElseBlock);
 		break;
 	}
-case node_type::ConditionStatement:
-{
-	Value *conditionStatementVal = childNodes[0]->codegen();
-	return conditionStatementVal;
-}
-case node_type::GroupedExpression:
-{
-	Value *groupedExpressionVal;
-	for (int i = 0; i < childNodes.size(); i++)
-	{
-		if (childNodes[i]->type == node_type::ExpressionStatement)
-			groupedExpressionVal = childNodes[i]->codegen();
+	case node_type::ConditionStatement: {
+		Value* conditionStatementVal = childNodes[0]->codegen();
+		return conditionStatementVal;
 	}
-	return groupedExpressionVal;
-}
-case node_type::FunctionCall:
-{
-	int argsIdx = -1;
-	string name;
-	for (int i = 0; i < childNodes.size(); i++)
-	{
-		auto type = childNodes[i]->type;
-		auto value = childNodes[i]->value;
-		if (type == node_type::FunctionIdentifier)
-		{
-			name = value;
+	case node_type::GroupedExpression: {
+		Value* groupedExpressionVal;
+		for (int i = 0; i < childNodes.size(); i++) {
+			if (childNodes[i]->type == node_type::ExpressionStatement)
+				groupedExpressionVal = childNodes[i]->codegen();
 		}
-		else if (type == node_type::CallParameterList)
-		{
-			argsIdx = i;
-		}
+		return groupedExpressionVal;
 	}
-	vector<Value *> Args;
-	for (int k = 0; k < childNodes[argsIdx]->childNodes.size(); k++)
-	{
-		auto type = childNodes[argsIdx]->childNodes[k]->type;
-		auto value = childNodes[argsIdx]->childNodes[k]->value;
-		if (type == node_type::Variable)
-		{
-			Args.push_back(childNodes[argsIdx]->childNodes[k]->codegen());
+	case node_type::FunctionCall: {
+		int argsIdx = -1;
+		string name;
+		for (int i = 0; i < childNodes.size(); i++) {
+			auto type = childNodes[i]->type;
+			auto value = childNodes[i]->value;
+			if (type == node_type::FunctionIdentifier) {
+				name = value;
+			}
+			else if (type == node_type::CallParameterList) {
+				argsIdx = i;
+			}
 		}
-		else if (type == node_type::LiteralExpression)
-		{
-			Args.push_back(childNodes[argsIdx]->childNodes[k]->childNodes[0]->codegen());
+		vector<Value*>Args;
+		for (int k = 0; k < childNodes[argsIdx]->childNodes.size(); k++) {
+			auto type = childNodes[argsIdx]->childNodes[k]->type;
+			auto value = childNodes[argsIdx]->childNodes[k]->value;
+			if (type == node_type::Variable) {
+				Args.push_back(childNodes[argsIdx]->childNodes[k]->codegen());
+			}
+			else if (type == node_type::LiteralExpression) {
+				Args.push_back(childNodes[argsIdx]->childNodes[k]->childNodes[0]->codegen());
+			}
 		}
+
+		Function* Callee = TheModule->getFunction(name);
+		if (!Callee)return IRError("Function not exist");
+		if (Args.size() != Callee->arg_size())
+			return IRError("Parameter number mismatch");
+		int j = 0;
+		for (auto& calleeArg : Callee->args()) {
+			if (calleeArg.getType() != Args[j]->getType())
+				return IRError("Parameter type mismatch");
+			j++;
+		}
+
+		return Builder->CreateCall(Callee, Args, "call");
+	}
+	case node_type::LiteralExpression: {
+		return childNodes[0]->codegen();
+	}
+	case node_type::DeclarationRightStatement: {
+		return childNodes[0]->codegen();
+	}
+	case node_type::ExpressionStatement: {
+		return childNodes[0]->codegen();
+	}
+	case node_type::ReturnExpression: {
+		Value* returnVal = nullptr;
+		for (int i = 0; i < childNodes.size(); i++) {
+			if (childNodes[i]->type == node_type::ExpressionStatement) {
+				returnVal = childNodes[i]->codegen();
+			}
+		}
+		return Builder->CreateRet(returnVal);
+	}
+	case node_type::BreakExpression: {
+		return Builder->CreateRetVoid();
 	}
 
-	Function *Callee = TheModule->getFunction(name);
-	if (!Callee)
-		return IRError("Function not exist");
-	if (Args.size() != Callee->arg_size())
-		return IRError("Parameter number mismatch");
-	int j = 0;
-	for (auto &calleeArg : Callee->args())
-	{
-		if (calleeArg.getType() != Args[j]->getType())
-			return IRError("Parameter type mismatch");
-		j++;
+	default:
+		return ConstantFP::get(Type::getDoubleTy(*TheContext), 1.0);
 	}
 
-	return Builder->CreateCall(Callee, Args, "call");
-}
-case node_type::LiteralExpression:
-{
-	return childNodes[0]->codegen();
-}
-case node_type::DeclarationRightStatement:
-{
-	return childNodes[0]->codegen();
-}
-case node_type::ExpressionStatement:
-{
-	return childNodes[0]->codegen();
-}
-case node_type::ReturnExpression:
-{
-	Value *returnVal = nullptr;
-	for (int i = 0; i < childNodes.size(); i++)
-	{
-		if (childNodes[i]->type == node_type::ExpressionStatement)
-		{
-			returnVal = childNodes[i]->codegen();
-		}
-	}
-	return Builder->CreateRet(returnVal);
-}
-case node_type::BreakExpression:
-{
-	return Builder->CreateRetVoid();
-}
-
-default:
-	return ConstantFP::get(Type::getDoubleTy(*TheContext), 1.0);
-}
 }

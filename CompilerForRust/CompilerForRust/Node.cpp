@@ -380,36 +380,36 @@ Value *Node::codegen()
 			{
 			case hash_compile_time("+"):
 				if (L->getType() == Type::getFloatTy(*TheContext))
-					Builder->CreateFAdd(L, R, "addtmp");
+					return Builder->CreateFAdd(L, R, "addtmp");
 				else if (L->getType() == Type::getInt16Ty(*TheContext))
-					Builder->CreateAdd(L, R, "addtmp");
+					return Builder->CreateAdd(L, R, "addtmp");
 				return Constant::getNullValue(Type::getInt16Ty(*TheContext));
 			case hash_compile_time("-"):
 				if (L->getType() == Type::getFloatTy(*TheContext))
-					Builder->CreateFSub(L, R, "subtmp");
+					return Builder->CreateFSub(L, R, "subtmp");
 				else if (L->getType() == Type::getInt16Ty(*TheContext))
-					Builder->CreateSub(L, R, "subtmp");
+					return Builder->CreateSub(L, R, "subtmp");
 				return Constant::getNullValue(Type::getInt16Ty(*TheContext));
 			case hash_compile_time("*"):
 				if (L->getType() == Type::getFloatTy(*TheContext))
-					Builder->CreateFMul(L, R, "multmp");
+					return Builder->CreateFMul(L, R, "multmp");
 				else if (L->getType() == Type::getInt16Ty(*TheContext))
-					Builder->CreateMul(L, R, "multmp");
+					return Builder->CreateMul(L, R, "multmp");
 				return Constant::getNullValue(Type::getInt16Ty(*TheContext));
 			case hash_compile_time("/"):
 				if (L->getType() == Type::getInt16Ty(*TheContext))
-					Builder->CreateSDiv(L, R, "divtmp");
+					return Builder->CreateSDiv(L, R, "divtmp");
 				if (L->getType() == Type::getFloatTy(*TheContext))
-					Builder->CreateFDiv(L, R, "divtmp");
+					return Builder->CreateFDiv(L, R, "divtmp");
 				return Constant::getNullValue(Type::getInt16Ty(*TheContext));
 			case hash_compile_time("%"):
-				Builder->CreateSRem(L, R, "remtmp");
+				return Builder->CreateSRem(L, R, "remtmp");
 				return Constant::getNullValue(Type::getInt16Ty(*TheContext));
 			case hash_compile_time("<<"):
-				Builder->CreateShl(L, R, "shltmp");
+				return Builder->CreateShl(L, R, "shltmp");
 				return Constant::getNullValue(Type::getInt16Ty(*TheContext));
 			case hash_compile_time(">>"):
-				Builder->CreateLShr(L, R, "lshrtmp");
+				return Builder->CreateLShr(L, R, "lshrtmp");
 				return Constant::getNullValue(Type::getInt16Ty(*TheContext));
 			case hash_compile_time(">"):
 				if (L->getType() == Type::getInt16Ty(*TheContext))
@@ -494,36 +494,36 @@ Value *Node::codegen()
 			{
 			case hash_compile_time("+"):
 				if (L->getType() == Type::getFloatTy(*TheContext))
-					Builder->CreateFAdd(L, R, "addtmp");
+					return Builder->CreateFAdd(L, R, "addtmp");
 				else if (L->getType() == Type::getInt16Ty(*TheContext))
-					Builder->CreateAdd(L, R, "addtmp");
+					return Builder->CreateAdd(L, R, "addtmp");
 				return Constant::getNullValue(Type::getInt16Ty(*TheContext));
 			case hash_compile_time("-"):
 				if (L->getType() == Type::getFloatTy(*TheContext))
-					Builder->CreateFSub(L, R, "subtmp");
+					return Builder->CreateFSub(L, R, "subtmp");
 				else if (L->getType() == Type::getInt16Ty(*TheContext))
-					Builder->CreateSub(L, R, "subtmp");
+					return Builder->CreateSub(L, R, "subtmp");
 				return Constant::getNullValue(Type::getInt16Ty(*TheContext));
 			case hash_compile_time("*"):
 				if (L->getType() == Type::getFloatTy(*TheContext))
-					Builder->CreateFMul(L, R, "multmp");
+					return Builder->CreateFMul(L, R, "multmp");
 				else if (L->getType() == Type::getInt16Ty(*TheContext))
-					Builder->CreateMul(L, R, "multmp");
+					return Builder->CreateMul(L, R, "multmp");
 				return Constant::getNullValue(Type::getInt16Ty(*TheContext));
 			case hash_compile_time("/"):
 				if (L->getType() == Type::getInt16Ty(*TheContext))
-					Builder->CreateSDiv(L, R, "divtmp");
+					return Builder->CreateSDiv(L, R, "divtmp");
 				if (L->getType() == Type::getFloatTy(*TheContext))
-					Builder->CreateFDiv(L, R, "divtmp");
+					return Builder->CreateFDiv(L, R, "divtmp");
 				return Constant::getNullValue(Type::getInt16Ty(*TheContext));
 			case hash_compile_time("%"):
-				Builder->CreateSRem(L, R, "remtmp");
+				return Builder->CreateSRem(L, R, "remtmp");
 				return Constant::getNullValue(Type::getInt16Ty(*TheContext));
 			case hash_compile_time("<<"):
-				Builder->CreateShl(L, R, "shltmp");
+				return Builder->CreateShl(L, R, "shltmp");
 				return Constant::getNullValue(Type::getInt16Ty(*TheContext));
 			case hash_compile_time(">>"):
-				Builder->CreateLShr(L, R, "lshrtmp");
+				return Builder->CreateLShr(L, R, "lshrtmp");
 				return Constant::getNullValue(Type::getInt16Ty(*TheContext));
 			case hash_compile_time(">"):
 				if (L->getType() == Type::getInt16Ty(*TheContext))
@@ -626,30 +626,30 @@ Value *Node::codegen()
 				return Constant::getNullValue(Type::getInt16Ty(*TheContext));
 			case hash_compile_time("-"):
 				if (L->getType() == Type::getFloatTy(*TheContext))
-					Builder->CreateFSub(L, R, "subtmp");
+					return Builder->CreateFSub(L, R, "subtmp");
 				else if (L->getType() == Type::getInt16Ty(*TheContext))
-					Builder->CreateSub(L, R, "subtmp");
+					return Builder->CreateSub(L, R, "subtmp");
 				return Constant::getNullValue(Type::getInt16Ty(*TheContext));
 			case hash_compile_time("*"):
 				if (L->getType() == Type::getFloatTy(*TheContext))
-					Builder->CreateFMul(L, R, "multmp");
+					return Builder->CreateFMul(L, R, "multmp");
 				else if (L->getType() == Type::getInt16Ty(*TheContext))
-					Builder->CreateMul(L, R, "multmp");
+					return Builder->CreateMul(L, R, "multmp");
 				return Constant::getNullValue(Type::getInt16Ty(*TheContext));
 			case hash_compile_time("/"):
 				if (L->getType() == Type::getInt16Ty(*TheContext))
-					Builder->CreateSDiv(L, R, "divtmp");
+					return Builder->CreateSDiv(L, R, "divtmp");
 				if (L->getType() == Type::getFloatTy(*TheContext))
-					Builder->CreateFDiv(L, R, "divtmp");
+					return Builder->CreateFDiv(L, R, "divtmp");
 				return Constant::getNullValue(Type::getInt16Ty(*TheContext));
 			case hash_compile_time("%"):
-				Builder->CreateSRem(L, R, "remtmp");
+				return Builder->CreateSRem(L, R, "remtmp");
 				return Constant::getNullValue(Type::getInt16Ty(*TheContext));
 			case hash_compile_time("<<"):
-				Builder->CreateShl(L, R, "shltmp");
+				return Builder->CreateShl(L, R, "shltmp");
 				return Constant::getNullValue(Type::getInt16Ty(*TheContext));
 			case hash_compile_time(">>"):
-				Builder->CreateLShr(L, R, "lshrtmp");
+				return Builder->CreateLShr(L, R, "lshrtmp");
 				return Constant::getNullValue(Type::getInt16Ty(*TheContext));
 			case hash_compile_time(">"):
 				if (L->getType() == Type::getInt16Ty(*TheContext))
@@ -954,7 +954,7 @@ Value *Node::codegen()
 		}
 		Function *TheFunction = Builder->GetInsertBlock()->getParent();
 		Value *CondVal = childNodes[condIdx]->codegen();
-		CondVal = Builder->CreateICmpNE(CondVal,
+		CondVal = Builder->CreateICmpEQ(CondVal,
 																		ConstantInt::get(Type::getInt1Ty(*TheContext), 1), "cond");
 
 		BasicBlock *BodyBlock = BasicBlock::Create(*TheContext, "body", TheFunction);
@@ -968,7 +968,7 @@ Value *Node::codegen()
 			return nullptr;
 		}
 		CondVal = childNodes[condIdx]->codegen();
-		CondVal = Builder->CreateICmpNE(CondVal,
+		CondVal = Builder->CreateICmpEQ(CondVal,
 																		ConstantInt::get(Type::getInt1Ty(*TheContext), 1), "cond");
 		Builder->CreateCondBr(CondVal, BodyBlock, AfterBlcok);
 
@@ -1020,7 +1020,7 @@ Value *Node::codegen()
 
 		condValue = childNodes[condIdx]->codegen();
 
-		condValue = Builder->CreateICmpNE(condValue,
+		condValue = Builder->CreateICmpEQ(condValue,
 																			ConstantInt::get(Type::getInt1Ty(*TheContext), 1), "cond");
 		Function *TheFunction = Builder->GetInsertBlock()->getParent();
 		//基本块
@@ -1173,11 +1173,12 @@ Value *Node::codegen()
 				V->getType() == Type::getInt8Ty(*TheContext) ||
 				V->getType() == Type::getInt1Ty(*TheContext))
 		{
-
+			Value *temp = Builder->CreateZExt(V, Type::getInt32Ty(*TheContext));
 			//输出格式
 			Value *intFormat = Builder->CreateGlobalStringPtr("%d");
 			//输出int变量
-			Builder->CreateCall(putsFunc, {intFormat, V});
+			Builder->CreateCall(putsFunc, {intFormat, temp});
+			Builder->CreateCall(putsFunc, Builder->CreateGlobalStringPtr("\n"));
 		}
 		else if (V->getType() == Type::getFloatTy(*TheContext))
 		{
@@ -1187,8 +1188,18 @@ Value *Node::codegen()
 			Value *floatFormat = Builder->CreateGlobalStringPtr("%lf");
 			//输出double变量
 			Builder->CreateCall(putsFunc, {floatFormat, floatTyToDoubleTy});
+			Builder->CreateCall(putsFunc, Builder->CreateGlobalStringPtr("\n"));
 		}
-
+		//AllocaInst* allocDeclrInt = Builder->CreateAlloca(IntegerType::get(TheModule->getContext(), 32), NULL, "a.addr");
+		//allocDeclrInt->setAlignment((llvm::Align)4);
+		//Value* RightValue = ConstantInt::get(*TheContext, APInt(32, 10));
+		//StoreInst* store = Builder->CreateStore(RightValue, allocDeclrInt, false);
+		//store->setAlignment((llvm::Align)4);
+		//LoadInst* a = Builder->CreateLoad(allocDeclrInt);
+		////输出格式
+		//Value* intFormat = Builder->CreateGlobalStringPtr("%d");
+		////输出int变量
+		//Builder->CreateCall(putsFunc, { intFormat,a });
 		return Constant::getNullValue(Type::getInt32Ty(*TheContext));
 	}
 

@@ -1,9 +1,11 @@
 fn main(){
-	let a = 1.2;
-	let b = 1.5;
+	let a = 1.5;
+	let b = 1.4;
 	// asd
 	// sdfasdf
 	// sdfasdf
-		a=5.6+1.0;	
+		a=5.5+1.5;
+		a*=b;
+
 		println!("{}" , a);
 }

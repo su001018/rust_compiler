@@ -1,18 +1,21 @@
-#include"Parser.h"
+#include "Parser.h"
 #include <iostream>
 using namespace std;
 
-int main() {
-	string file = "loopTest.txt";
+int main()
+{
+	string file = "floatTest.txt";
 	Parser parser(file);
 	parser.parse();
 
-	//Éú³ÉIR
+	//ï¿½ï¿½ï¿½ï¿½IR
 	parser.ast->tree->Init();
 	parser.ast->tree->codegen();
 	parser.ast->tree->print();
 
-	//µ÷ÓÃJIT
+	//ï¿½ï¿½ï¿½ï¿½JIT
+	InitializeNativeTarget();
+	InitializeNativeTargetAsmPrinter();
 	parser.ast->tree->initEE();
 	parser.ast->tree->runEE();
 	return 0;
